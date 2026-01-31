@@ -42,4 +42,4 @@ This project is licensed under the **GNU General Public License v2.0 or later** 
 **Developed with ❤️.**
 
 ----
-## **For Snaps or Flatpaks, window decoration hiding might be limited due to sandbox restrictions. For the best experience, use native (.deb/RPM) packages.**
+### **For Snaps or Flatpaks, window decoration hiding might be limited due to sandbox restrictions. For the best experience, use native (.deb/RPM) packages.**

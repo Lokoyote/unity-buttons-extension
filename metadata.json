@@ -1,0 +1,8 @@
+{
+  "uuid": "unity-buttons-title@lokoyote.eu",
+  "name": "Unity Buttons and Title",
+  "description": "Unity-style window controls and title in the top panel. Only shows up when a window is maximized for a seamless, space-saving experience.",
+  "shell-version": ["45", "46", "47"],
+  "url": "https://github.com/Lokoyote/unity-buttons-extension",
+  "version": 1
+}

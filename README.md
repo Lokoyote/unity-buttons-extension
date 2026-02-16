@@ -9,8 +9,6 @@
 
 ### 📸 Screenshot
 [![Unity Buttons Preview](https://github.com/Lokoyote/unity-buttons-extension/blob/main/Unity-Buttons-Title.png)](Screenshot)
-*(Replace the link above with your real screenshot URL after uploading it to GitHub)*
-
 ---
 
 ## 🚀 Overview

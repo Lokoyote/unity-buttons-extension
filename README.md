@@ -23,6 +23,9 @@ It is designed for users of **Ubuntu 24.04** and **Fedora** looking to recapture
 * **Dynamic Title**: Displays the focused window's title next to the controls for quick identification.
 * **Clean Integration**: No bulky hover effects on the panel; only the buttons themselves are interactive, maintaining a native and minimalist look.
 * **Desktop Friendly**: Intelligent filtering to avoid showing "Desktop Icons" as a window title.
+* **Windows Unmaximized Size**: Choose the ratio for your windows when they are unmaximized.
+* **Hide LibreOffice and Spotify Titlebars**: Titlebars hidden when maximized.
+* **Automatic Centering Windows**: Unmaximized windows are automatically centered.
 
 ## 🛠️ Installation
 

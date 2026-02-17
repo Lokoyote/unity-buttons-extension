@@ -17,17 +17,21 @@ This extension cleans up your workspace and maximizes your screen real estate by
 It is designed for users of **Ubuntu 24.04** and **Fedora** looking to recapture the productivity of the classic Unity desktop with modern GNOME Shell performance.
 
 ## ✨ Key Features
-* **Smart Visibility**: Buttons and title appear in the top bar **only** when the current window is maximized.
-* **Auto-Decoration Toggle**: Automatically hides native window buttons when maximized and restores them instantly when the window is unmaximized (restored).
-* **Unity Aesthetic**: Features sleek, circular buttons for Closing and Unmaximizing, following the iconic Unity layout.
-* **Dynamic Title**: Displays the focused window's title next to the controls for quick identification.
-* **Clean Integration**: No bulky hover effects on the panel; only the buttons themselves are interactive, maintaining a native and minimalist look.
-* **Desktop Friendly**: Intelligent filtering to avoid showing "Desktop Icons" as a window title.
-* **Windows Unmaximized Size**: Choose the ratio for your windows when they are unmaximized.
-* **Hide LibreOffice and Spotify Titlebars**: Titlebars hidden when maximized.
-* **Automatic Centering Windows**: Unmaximized windows are automatically centered.
+* **Panel buttons** — Close and restore buttons replace the native title bar buttons when a window is maximized
+* **Smart centering** — Unmaximized windows are centered on screen; small windows keep their original size
+* **Jank-free animation** — Clone-based masking hides Mutter's repositioning artifacts
+* **Live title tracking** — Title updates in real time when navigating folders in Nautilus, switching browser tabs, etc.
+* **XWayland support** — Works with Spotify, Electron apps, and other XWayland clients
+* **Minimum open size** — Optionally enforce a minimum size for new maximizable windows
+* **LibreOffice fix** — Hides the redundant headerbar in maximized LibreOffice windows
+* **Crash-safe layout** — The original button-layout is backed up to both GSettings and a cache file; restored on disable even after crashes
 
 ## 🛠️ Installation
+
+### From extensions.gnome.org
+
+1. Visit Unity Buttons on EGO
+2. Toggle the switch to install
 
 ### Manual Installation
 1. Download the latest release.
@@ -35,6 +39,60 @@ It is designed for users of **Ubuntu 24.04** and **Fedora** looking to recapture
 3. Ensure the folder name matches the UUID in `metadata.json`.
 4. Log out and log back in (or restart GNOME Shell).
 5. Enable the extension using **GNOME Extensions** or **Extension Manager**.
+
+6. ## Settings
+
+Open the preferences with:
+```bash
+gnome-extensions prefs unity-buttons@music-lmusic.music
+```
+
+| Setting | Range | Default | Description |
+|---------|-------|---------|-------------|
+| **Maximum size** | 50–95% | 80% | Unmaximized windows larger than this are shrunk. The prefs window resizes live as you drag the slider. |
+| **Minimum open size** | 30–90% (or off) | Off | New maximizable windows that open smaller than this are enlarged and centered. |
+
+## How it works
+
+When a window is unmaximized for the first time:
+
+1. A `Clutter.Clone` is created at the maximized position
+2. The real window is hidden (`opacity = 0`)
+3. `unmaximize()` + `move_resize_frame()` reposition the window behind the clone
+4. After Mutter settles (~10 ms), the **actual** actor position is read
+5. The clone snaps to the actual position (10 ms transition = imperceptible)
+6. The real window is revealed → zero visual mismatch
+
+On subsequent maximize/unmaximize cycles, the saved position is reused and Mutter handles the animation natively.
+
+## File structure
+
+```
+unity-buttons@music-lmusic.music/
+├── extension.js      — Main extension logic
+├── prefs.js          — Preferences window (Adw / GTK 4)
+├── stylesheet.css    — Panel button styling
+├── metadata.json     — Extension metadata
+├── schemas/
+│   └── org.gnome.shell.extensions.unity-buttons.gschema.xml
+├── LICENSE
+└── README.md
+```
+
+## Development
+
+```bash
+# Watch logs
+journalctl -f -o cat /usr/bin/gnome-shell
+
+# Enable debug logging (in extension.js, set DEBUG = true)
+
+# Compile schemas after changes
+glib-compile-schemas schemas/
+
+# Package for EGO upload
+make pack
+```
 
 ## 📄 License
 This project is licensed under the **GNU General Public License v2.0 or later** - see the [LICENSE](LICENSE) file for details.

@@ -1,14 +1,11 @@
 /**
  * Unity Buttons — GNOME Shell Extension
  *
- * macOS-style close/restore buttons in the top panel with:
- *   - Smart unmaximize centering (clone-based anti-jank)
- *   - Live title tracking (Nautilus folder navigation, etc.)
- *   - Full XWayland support (Spotify, Electron apps, System Monitor)
- *   - Optional minimum open size enforcement
- *   - Persistent button-layout backup/restore
+ * macOS-style close/restore buttons in the top panel with smart
+ * unmaximize centering, XWayland support, and optional minimum
+ * open size enforcement for maximizable windows.
  *
- * Compatible with GNOME Shell 46 & 47.
+ * GNOME Shell 46 & 47 — License: GPL-3.0-or-later
  */
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -25,10 +22,8 @@ const _log = DEBUG
     ? (msg) => console.log(`[Unity] ${msg}`)
     : () => {};
 
-// Clone transition — nearly invisible but enough for Mutter to settle
-const ANIM_DURATION = 10;  // ms
+const ANIM_DURATION = 10;
 
-// GTK 3 CSS to hide LibreOffice's redundant headerbar when maximized
 const LO_HACK = `
 window.maximized headerbar, window.maximized titlebar, window.maximized .titlebar {
     padding: 0 !important; margin: 0 !important; min-height: 0 !important;
@@ -36,12 +31,10 @@ window.maximized headerbar, window.maximized titlebar, window.maximized .titleba
     display: none !important; margin-bottom: -30px !important;
 }`;
 
-// Desktop WM classes — never show panel buttons for these
 const DESKTOP_WM = new Set([
     'ding', 'nemo-desktop', 'nautilus-desktop', 'caja-desktop',
 ]);
 
-// Button colours (Ubuntu/Unity palette)
 const BTN = {
     close:   { n: '#df4a16', h: '#e95420' },
     restore: { n: '#5f5e5a', h: '#7a7974' },
@@ -64,7 +57,6 @@ class UnityButtons extends PanelMenu.Button {
         this._ext = ext;
         this.style_class = 'unity-panel-button';
 
-        // Disable PopupMenu so clicks pass through to child St.Buttons
         this.menu.setSensitive(false);
         this.menu.actor.hide();
 
@@ -97,7 +89,6 @@ class UnityButtons extends PanelMenu.Button {
 
     vfunc_event() { return Clutter.EVENT_PROPAGATE; }
 
-    // ── Buttons ─────────────────────────────────────────────────────────
     _mkBtn(type) {
         const c = BTN[type];
         const sN = btnStyle(c.n), sH = btnStyle(c.h);
@@ -109,14 +100,15 @@ class UnityButtons extends PanelMenu.Button {
         btn.connect('clicked', () => {
             const w = global.display.get_focus_window();
             if (!w) return;
-            type === 'close'
-                ? w.delete(global.get_current_time())
-                : this._doRestore(w);
+            if (type === 'close')
+                w.delete(global.get_current_time());
+            else
+                this._doRestore(w);
         });
         return btn;
     }
 
-    // ── Safe timers (all tracked → cancelled on destroy) ────────────────
+    // ── Timer management ────────────────────────────────────────────────
     _tm(ms, fn) {
         const id = GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
             this._timers.delete(id);
@@ -125,12 +117,15 @@ class UnityButtons extends PanelMenu.Button {
         this._timers.add(id);
         return id;
     }
+
     _tmCancel(id) {
-        if (this._timers.delete(id)) GLib.source_remove(id);
+        if (this._timers.delete(id))
+            GLib.source_remove(id);
     }
+
     _tmCancelAll() {
         for (const id of this._timers)
-            try { GLib.source_remove(id); } catch(_) {}
+            GLib.source_remove(id);
         this._timers.clear();
     }
 
@@ -140,9 +135,11 @@ class UnityButtons extends PanelMenu.Button {
     _doRestore(win) {
         if (!win || win.get_maximized() !== Meta.MaximizeFlags.BOTH) return;
         const actor = win.get_compositor_private();
-        if (!actor) { win.unmaximize(Meta.MaximizeFlags.BOTH); return; }
+        if (!actor) {
+            win.unmaximize(Meta.MaximizeFlags.BOTH);
+            return;
+        }
 
-        // Mutter-native mode: we already know where the window goes
         if (win._ubLastPos) {
             _log(`Mutter-native: "${win.get_title()}"`);
             win.unmaximize(Meta.MaximizeFlags.BOTH);
@@ -155,19 +152,9 @@ class UnityButtons extends PanelMenu.Button {
     // =====================================================================
     // CLONE-BASED ANTI-JANK ANIMATION
     //
-    // Strategy:
-    //   1. Snapshot maximized geometry
-    //   2. Clone at that position, hide real window
-    //   3. unmaximize()
-    //   4. WAIT for Mutter to finish (signal-based for XWayland)
-    //   5. THEN move_resize_frame() to center
-    //   6. Read actual actor position
-    //   7. Snap clone there (10ms), reveal real window
-    //   8. Re-focus (critical for XWayland)
-    //
-    // Key insight for XWayland: unmaximize() is ASYNC via X11 protocol.
-    // We must wait for size-changed before trying move_resize_frame,
-    // otherwise the X client ignores the resize.
+    // For XWayland: unmaximize() is async via X11 protocol. We wait for
+    // size-changed before sending move_resize_frame, otherwise the X
+    // client ignores the resize request.
     // =====================================================================
     _animateRestore(win, actor, isPreRestore) {
         if (this._animating.has(win)) return;
@@ -179,7 +166,6 @@ class UnityButtons extends PanelMenu.Button {
         this._animating.add(win);
         win._ubIgnore = true;
 
-        // 1-2. Snapshot + clone
         const sx = actor.x, sy = actor.y, sw = actor.width, sh = actor.height;
         const tgt = this._targetRect(win);
         if (!tgt) {
@@ -195,29 +181,32 @@ class UnityButtons extends PanelMenu.Button {
         actor.opacity = 0;
         global.window_group.add_child(clone);
 
-        // ── Idempotent cleanup ──────────────────────────────────────────
+        // Track whether the unmanaged signal is still connected
+        let unmConnected = false;
+        let unmId = 0;
+
         let done = false;
         const finish = () => {
             if (done) return;
             done = true;
             this._tmCancel(safety);
-            if (actor) actor.opacity = 255;
-            try {
-                if (clone.get_parent()) clone.get_parent().remove_child(clone);
-                clone.destroy();
-            } catch(_) {}
+            actor.opacity = 255;
+            if (clone.get_parent())
+                clone.get_parent().remove_child(clone);
+            clone.destroy();
             this._animating.delete(win);
 
-            // Re-focus — essential for XWayland which loses focus
-            // when actor.opacity was 0. Multiple attempts for reliability.
+            if (unmConnected) {
+                win.disconnect(unmId);
+                unmConnected = false;
+            }
+
+            // Re-focus — XWayland loses focus when actor.opacity was 0
             if (win && !win.minimized) {
-                const doFocus = () => {
-                    try { win.activate(global.get_current_time()); } catch(_) {}
-                };
-                doFocus();
+                win.activate(global.get_current_time());
                 if (isX) {
-                    this._tm(50,  () => { doFocus(); return GLib.SOURCE_REMOVE; });
-                    this._tm(150, () => { doFocus(); return GLib.SOURCE_REMOVE; });
+                    this._tm(50,  () => { win.activate(global.get_current_time()); return GLib.SOURCE_REMOVE; });
+                    this._tm(150, () => { win.activate(global.get_current_time()); return GLib.SOURCE_REMOVE; });
                 }
             }
 
@@ -227,39 +216,31 @@ class UnityButtons extends PanelMenu.Button {
             });
         };
 
-        // Safety net — 3 s for XWayland (they can be very slow)
         const safety = this._tm(isX ? 3000 : 1500, () => {
             _log('Safety cleanup');
             finish();
             return GLib.SOURCE_REMOVE;
         });
 
-        // Window destroyed mid-animation → cleanup
-        let unmId = 0;
-        try {
-            unmId = win.connect('unmanaged', () => {
-                try { win.disconnect(unmId); } catch(_) {}
-                finish();
-            });
-        } catch(_) {}
+        unmId = win.connect('unmanaged', () => {
+            unmConnected = false;
+            win.disconnect(unmId);
+            finish();
+        });
+        unmConnected = true;
 
-        // 3. Unmaximize
         if (isPreRestore) win.unmaximize(Meta.MaximizeFlags.BOTH);
 
-        // 4-7. The rest depends on whether the window is XWayland or not
         if (isX) {
-            // XWayland path: WAIT for size-changed signal from the X client
-            // confirming it has processed the unmaximize, then move+finalize
-            this._x11WaitAndMove(win, actor, clone, tgt, unmId, finish, () => done);
+            this._x11WaitAndMove(win, actor, clone, tgt, finish, () => done);
         } else {
-            // Wayland path: window settles quickly, just use short timer
             win.move_resize_frame(true, tgt.x, tgt.y, tgt.width, tgt.height);
             this._tm(10, () => {
                 if (done) return GLib.SOURCE_REMOVE;
                 win.move_resize_frame(true, tgt.x, tgt.y, tgt.width, tgt.height);
                 this._tm(0, () => {
                     if (done) return GLib.SOURCE_REMOVE;
-                    this._snapClone(win, actor, clone, unmId, finish);
+                    this._snapClone(win, actor, clone, finish);
                     return GLib.SOURCE_REMOVE;
                 });
                 return GLib.SOURCE_REMOVE;
@@ -267,27 +248,19 @@ class UnityButtons extends PanelMenu.Button {
         }
     }
 
-    // XWayland: wait for the window to actually change size (= unmaximize done),
-    // then send move_resize_frame, then finalize.
-    _x11WaitAndMove(win, actor, clone, tgt, unmId, finish, isDone) {
+    _x11WaitAndMove(win, actor, clone, tgt, finish, isDone) {
         let sizeSignal = 0;
         let timeoutId  = 0;
 
         const proceed = () => {
-            // Disconnect signal + timeout
             if (sizeSignal) {
-                try { win.disconnect(sizeSignal); } catch(_) {}
+                win.disconnect(sizeSignal);
                 sizeSignal = 0;
             }
             this._tmCancel(timeoutId);
-
             if (isDone()) return;
 
-            _log(`X11 unmax confirmed, moving to center`);
-
-            // Now the X client has processed unmaximize → we can resize.
-            // Send multiple times because some X clients (Spotify/CEF)
-            // need repeated ConfigureRequests to actually comply.
+            _log('X11 unmax confirmed, moving to center');
             win.move_resize_frame(true, tgt.x, tgt.y, tgt.width, tgt.height);
 
             this._tm(50, () => {
@@ -300,32 +273,26 @@ class UnityButtons extends PanelMenu.Button {
                 win.move_resize_frame(true, tgt.x, tgt.y, tgt.width, tgt.height);
                 return GLib.SOURCE_REMOVE;
             });
-
-            // Final read + snap after giving X client time to process
             this._tm(200, () => {
                 if (isDone()) return GLib.SOURCE_REMOVE;
-                this._snapClone(win, actor, clone, unmId, finish);
+                this._snapClone(win, actor, clone, finish);
                 return GLib.SOURCE_REMOVE;
             });
         };
 
-        // Listen for size-changed = proof that unmaximize is done
         sizeSignal = win.connect('size-changed', () => {
-            // Only proceed if window is no longer maximized
             if (win.get_maximized() === Meta.MaximizeFlags.BOTH) return;
             proceed();
         });
 
-        // Fallback timeout if signal never fires (shouldn't happen, but safe)
         timeoutId = this._tm(500, () => {
-            _log('X11 size-changed timeout, proceeding anyway');
+            _log('X11 size-changed timeout, proceeding');
             proceed();
             return GLib.SOURCE_REMOVE;
         });
     }
 
-    // Read actual actor position and snap clone there
-    _snapClone(win, actor, clone, unmId, finish) {
+    _snapClone(win, actor, clone, finish) {
         if (!win || !actor) { finish(); return; }
 
         const r = win.get_frame_rect();
@@ -337,20 +304,14 @@ class UnityButtons extends PanelMenu.Button {
             width: actor.width, height: actor.height,
             duration: ANIM_DURATION,
             mode: Clutter.AnimationMode.EASE_OUT_QUINT,
-            onComplete: () => {
-                try { win.disconnect(unmId); } catch(_) {}
-                finish();
-            },
+            onComplete: () => finish(),
         });
     }
 
-    // ── Target rectangle (centered, respecting original size) ───────────
     _targetRect(win) {
         if (!win) return null;
         const wa  = Main.layoutManager.getWorkAreaForMonitor(win.get_monitor());
         const pct = this._s.get_int('window-size-percent') || 80;
-
-        // Always use the configured percentage as the target size
         const w = Math.min(Math.floor(wa.width  * pct / 100), wa.width);
         const h = Math.min(Math.floor(wa.height * pct / 100), wa.height);
 
@@ -362,7 +323,7 @@ class UnityButtons extends PanelMenu.Button {
     }
 
     // =====================================================================
-    // GLOBAL SIGNAL WIRING
+    // GLOBAL SIGNALS
     // =====================================================================
     _connectGlobal() {
         this._sigFocus = global.display.connect(
@@ -370,14 +331,10 @@ class UnityButtons extends PanelMenu.Button {
 
         this._sigCreated = global.display.connect(
             'window-created', (_d, w) => {
-                // Track for max/unmax signals (quick)
                 this._tm(50, () => {
                     this._track(w);
                     return GLib.SOURCE_REMOVE;
                 });
-                // Min size: use signal-based approach instead of fixed timers.
-                // We hook size-changed to catch when the window gets its real
-                // geometry, then enforce. Also set a fallback timer.
                 this._setupMinSizeWatch(w);
             });
 
@@ -448,52 +405,39 @@ class UnityButtons extends PanelMenu.Button {
 
     _untrack(win) {
         if (!win || !win._ubTracked) return;
-        for (const s of ['_ubSigH','_ubSigV','_ubSigPos','_ubSigSz','_ubMinSzSig']) {
-            if (win[s]) { try { win.disconnect(win[s]); } catch(_) {} }
-            delete win[s];
+        for (const s of ['_ubSigH', '_ubSigV', '_ubSigPos', '_ubSigSz', '_ubMinSzSig']) {
+            if (win[s]) {
+                win.disconnect(win[s]);
+                delete win[s];
+            }
         }
-        for (const p of ['_ubWasMaxH','_ubWasMaxV','_ubOrigSize',
-                          '_ubLastPos','_ubIgnore','_ubTracked',
-                          '_ubMinSzDone','_ubMinSzOkCount'])
+        for (const p of ['_ubWasMaxH', '_ubWasMaxV', '_ubOrigSize',
+                          '_ubLastPos', '_ubIgnore', '_ubTracked',
+                          '_ubMinSzDone', '_ubMinSzOkCount'])
             delete win[p];
     }
 
     // =====================================================================
-    // MINIMUM OPEN SIZE — PERSISTENT ENFORCEMENT
+    // MINIMUM OPEN SIZE
     //
-    // Many apps set their own size AFTER the window is created, sometimes
-    // multiple times (initial size → theme adjustment → content layout).
-    // We must keep watching and re-enforcing for several seconds.
+    // Only applies to windows that have a maximize button (can_maximize).
+    // Dialogs, popups, and fixed-size windows are left alone.
     //
-    // Strategy:
-    //   1. Connect size-changed signal on the new window
-    //   2. Also schedule periodic checks at 200, 500, 1000, 2000, 3000 ms
-    //   3. Each time: if window is too small, resize it
-    //   4. Stop only after 3 seconds OR after the window stays at the
-    //      correct size for 2 consecutive checks
+    // We keep watching for 3.5s because apps often resize themselves
+    // multiple times after creation (theme, content layout, etc.).
     // =====================================================================
     _setupMinSizeWatch(win) {
         if (!win) return;
-        
-        // Si la fenêtre ne peut pas être maximisée (ex: dialog, tooltips, modales),
-        // on ne touche pas à sa taille.
-        if (!win.can_maximize()) return;
 
         const pct = this._s.get_int('min-open-size-percent');
         if (!pct || pct <= 0) return;
 
-        // State for this window's enforcement
-        win._ubMinSzOkCount = 0;  // how many checks it was already large enough
+        win._ubMinSzOkCount = 0;
 
-        // React to every size change the app makes
-        try {
-            win._ubMinSzSig = win.connect('size-changed', () => {
-                this._enforceMinSize(win);
-            });
-        } catch(_) {}
+        win._ubMinSzSig = win.connect('size-changed', () => {
+            this._enforceMinSize(win);
+        });
 
-        // Periodic checks — catches apps that set size without triggering
-        // size-changed, and provides reliable fallback timing
         for (const ms of [200, 500, 800, 1200, 2000, 3000]) {
             this._tm(ms, () => {
                 this._enforceMinSize(win);
@@ -501,7 +445,6 @@ class UnityButtons extends PanelMenu.Button {
             });
         }
 
-        // Hard stop at 3.5s — disconnect signal, clean up
         this._tm(3500, () => {
             this._stopMinSizeWatch(win);
             return GLib.SOURCE_REMOVE;
@@ -512,6 +455,10 @@ class UnityButtons extends PanelMenu.Button {
         if (!win || win._ubMinSzDone) return;
         if (win.get_maximized()) return;
 
+        // Only enforce on windows that have a maximize button.
+        // This excludes dialogs, popups, fixed-size utilities, etc.
+        if (!win.can_maximize()) return;
+
         const pct = this._s.get_int('min-open-size-percent');
         if (!pct || pct <= 0) {
             this._stopMinSizeWatch(win);
@@ -519,18 +466,13 @@ class UnityButtons extends PanelMenu.Button {
         }
 
         const r = win.get_frame_rect();
-
-        // Window not mapped yet — skip this round
         if (r.width < 10 || r.height < 10) return;
 
         const wa = Main.layoutManager.getWorkAreaForMonitor(win.get_monitor());
         const mw = Math.floor(wa.width  * pct / 100);
         const mh = Math.floor(wa.height * pct / 100);
 
-        // Already large enough?
         if (r.width >= mw && r.height >= mh) {
-            // Must pass 2 consecutive checks to be sure the app isn't
-            // about to resize itself smaller again
             win._ubMinSzOkCount = (win._ubMinSzOkCount || 0) + 1;
             if (win._ubMinSzOkCount >= 2) {
                 _log(`Min size OK: "${win.get_title()}" ${r.width}×${r.height}`);
@@ -539,9 +481,7 @@ class UnityButtons extends PanelMenu.Button {
             return;
         }
 
-        // Too small → resize and center
         win._ubMinSzOkCount = 0;
-
         const nw = Math.max(r.width,  mw);
         const nh = Math.max(r.height, mh);
         const nx = wa.x + Math.floor((wa.width  - nw) / 2);
@@ -552,7 +492,6 @@ class UnityButtons extends PanelMenu.Button {
         win._ubIgnore = true;
         win.move_resize_frame(true, nx, ny, nw, nh);
 
-        // Brief ignore window to avoid our own signals triggering loops
         this._tm(150, () => {
             if (win) win._ubIgnore = false;
             return GLib.SOURCE_REMOVE;
@@ -563,17 +502,14 @@ class UnityButtons extends PanelMenu.Button {
         if (!win) return;
         win._ubMinSzDone = true;
         if (win._ubMinSzSig) {
-            try { win.disconnect(win._ubMinSzSig); } catch(_) {}
+            win.disconnect(win._ubMinSzSig);
             delete win._ubMinSzSig;
         }
         delete win._ubMinSzOkCount;
         win._ubIgnore = false;
-        // Save final size as original
-        if (win) {
-            const f = win.get_frame_rect();
-            if (f.width >= 50 && f.height >= 50)
-                win._ubOrigSize = { width: f.width, height: f.height };
-        }
+        const f = win.get_frame_rect();
+        if (f.width >= 50 && f.height >= 50)
+            win._ubOrigSize = { width: f.width, height: f.height };
     }
 
     // =====================================================================
@@ -617,7 +553,6 @@ class UnityButtons extends PanelMenu.Button {
         this._refresh();
     }
 
-    // ── X11 decoration toggle ───────────────────────────────────────────
     _applyXprop(win, hide) {
         if (!_isX11(win)) return;
         const m = win.get_description()?.match(/0x[0-9a-fA-F]+/);
@@ -629,7 +564,9 @@ class UnityButtons extends PanelMenu.Button {
                  '-set', '_MOTIF_WM_HINTS',
                  hide ? '2, 0, 0, 0, 0' : '2, 0, 1, 0, 0'],
                 Gio.SubprocessFlags.NONE);
-        } catch(_) {}
+        } catch (e) {
+            _log(`xprop failed: ${e.message}`);
+        }
     }
 
     // ── Panel visibility ────────────────────────────────────────────────
@@ -666,13 +603,14 @@ class UnityButtons extends PanelMenu.Button {
     }
 
     _disconnTitle() {
-        if (this._titleSigId && this._titleWin)
-            try { this._titleWin.disconnect(this._titleSigId); } catch(_) {}
-        this._titleSigId = 0;
-        this._titleWin   = null;
+        if (this._titleSigId && this._titleWin) {
+            this._titleWin.disconnect(this._titleSigId);
+            this._titleSigId = 0;
+            this._titleWin   = null;
+        }
     }
 
-    // ── Destruction ─────────────────────────────────────────────────────
+    // ── Cleanup ─────────────────────────────────────────────────────────
     destroy() {
         this._disconnTitle();
         this._tmCancelAll();
@@ -708,15 +646,15 @@ export default class UnityButtonsExtension extends Extension {
             GLib.get_user_cache_dir(), 'unity-buttons']);
         const path = GLib.build_filenamev([dir, 'layout.txt']);
         this._cache = Gio.File.new_for_path(path);
-        try { GLib.mkdir_with_parents(dir, 0o755); } catch(_) {}
+        GLib.mkdir_with_parents(dir, 0o755);
 
         const cur = this._wmSettings.get_string('button-layout');
         if (cur !== ':') {
             this._layout = cur;
-            this._cacheW(cur);
+            this._cacheWrite(cur);
             this._settings.set_string('original-layout-cache', cur);
         } else {
-            this._layout = this._cacheR()
+            this._layout = this._cacheRead()
                 || this._settings.get_string('original-layout-cache')
                 || 'close,minimize,maximize:';
         }
@@ -728,7 +666,7 @@ export default class UnityButtonsExtension extends Extension {
                 if (v && v !== ':') {
                     this._layout = v;
                     this._settings.set_string('original-layout-cache', v);
-                    this._cacheW(v);
+                    this._cacheWrite(v);
                 }
             });
 
@@ -742,11 +680,11 @@ export default class UnityButtonsExtension extends Extension {
         if (this._wmSigId) this._wmSettings.disconnect(this._wmSigId);
         this._applyGtkHack(false);
 
-        const r = this._cacheR()
+        const saved = this._cacheRead()
             || this._settings.get_string('original-layout-cache');
-        if (r && r !== ':') {
+        if (saved && saved !== ':') {
             this._updating = true;
-            this._wmSettings.set_string('button-layout', r);
+            this._wmSettings.set_string('button-layout', saved);
             this._updating = false;
         }
 
@@ -767,19 +705,24 @@ export default class UnityButtonsExtension extends Extension {
         }
     }
 
-    _cacheW(s) {
+    _cacheWrite(s) {
         try {
             this._cache.replace_contents(
                 s, null, false,
                 Gio.FileCreateFlags.REPLACE_DESTINATION, null);
-        } catch(_) {}
+        } catch (e) {
+            _log(`Cache write failed: ${e.message}`);
+        }
     }
-    _cacheR() {
+
+    _cacheRead() {
         try {
             if (!this._cache.query_exists(null)) return null;
             const [ok, d] = this._cache.load_contents(null);
             return ok ? new TextDecoder().decode(d).trim() : null;
-        } catch(_) { return null; }
+        } catch (e) {
+            return null;
+        }
     }
 
     _applyGtkHack(on) {
@@ -787,7 +730,7 @@ export default class UnityButtonsExtension extends Extension {
             const dir  = GLib.build_filenamev([
                 GLib.get_user_config_dir(), 'gtk-3.0']);
             const path = GLib.build_filenamev([dir, 'gtk.css']);
-            try { GLib.mkdir_with_parents(dir, 0o755); } catch(_) {}
+            GLib.mkdir_with_parents(dir, 0o755);
             const file = Gio.File.new_for_path(path);
 
             let css = '';
@@ -805,6 +748,8 @@ export default class UnityButtonsExtension extends Extension {
             file.replace_contents(
                 css.trim(), null, false,
                 Gio.FileCreateFlags.REPLACE_DESTINATION, null);
-        } catch(_) {}
+        } catch (e) {
+            _log(`GTK hack failed: ${e.message}`);
+        }
     }
 }

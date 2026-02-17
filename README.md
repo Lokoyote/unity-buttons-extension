@@ -32,7 +32,7 @@ It is designed for users of **Ubuntu 24.04** and **Fedora** looking to recapture
 
 ### From extensions.gnome.org
 
-1. Visit Unity Buttons on EGO
+1. Visit Unity Buttons on [https://extensions.gnome.org/extension/9241/unity-buttons-title/](https://extensions.gnome.org/extension/9241/unity-buttons-title/)
 2. Toggle the switch to install
 
 ### Manual Installation

@@ -25,6 +25,8 @@ It is designed for users of **Ubuntu 24.04** and **Fedora** looking to recapture
 * **Minimum open size** — Optionally enforce a minimum size for new maximizable windows
 * **LibreOffice fix** — Hides the redundant headerbar in maximized LibreOffice windows
 * **Crash-safe layout** — The original button-layout is backed up to both GSettings and a cache file; restored on disable even after crashes
+• **Minmimal window size**: New windows can be resized automatically
+* **Smooth animation** during unmaximizing
 
 ## 🛠️ Installation
 

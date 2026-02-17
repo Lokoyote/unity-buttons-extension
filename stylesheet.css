@@ -1,30 +1,33 @@
-/* Supprime l'effet de bouton gris global au survol */
-.unity-panel-button, 
-.unity-panel-button:hover, 
+/* Unity Buttons — GNOME Shell Extension Stylesheet */
+
+/* Désactive le fond gris au survol sur toute la zone de l'extension */
+.unity-panel-button {
+    background-color: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+.unity-panel-button:hover,
+.unity-panel-button:active,
 .unity-panel-button:focus {
     background-color: transparent !important;
-    background-image: none !important;
-    box-shadow: none !important;
-    border: none !important;
 }
 
 /* Conteneur interne */
 .unity-container {
-    spacing: 12px;
+    padding: 0 8px;
+    /* Aligne les éléments au centre verticalement sans les étirer */
+    vertical-align: middle;
 }
 
-/* Style des boutons circulaires */
-.unity-button {
-    width: 16px;
-    height: 16px;
-    border-radius: 10px;
-    margin: 6px 0;
-    border: 1px solid rgba(0, 0, 0, 0.1);
+.unity-buttons-box {
+    spacing: 4px;
 }
 
-/* Style du titre */
 .unity-title {
     font-weight: bold;
-    font-size: 15px;
-    color: #eeeeee;
+    margin-left: 12px;
+    color: white;
 }

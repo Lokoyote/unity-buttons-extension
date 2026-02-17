@@ -8,7 +8,7 @@
 ---
 
 ### 📸 Screenshot
-[![Unity Buttons Preview](https://github.com/Lokoyote/unity-buttons-extension/blob/main/Unity-Buttons-Title.png)](Screenshot)
+[![Unity Buttons Preview](https://github.com/Lokoyote/unity-buttons-extension/blob/main/Unity-Buttons-Title-screen.png)](Screenshot)
 ---
 
 ## 🚀 Overview

@@ -70,7 +70,7 @@ On subsequent maximize/unmaximize cycles, the saved position is reused and Mutte
 ## File structure
 
 ```
-unity-buttons@lokoyote.eu/
+unity-buttons-title@lokoyote.eu/
 ├── extension.js      — Main extension logic
 ├── prefs.js          — Preferences window (Adw / GTK 4)
 ├── stylesheet.css    — Panel button styling

@@ -29,7 +29,6 @@ macOS-style **close** and **restore** buttons in the top panel with the window t
 
 ### Titlebar Hiding
 - When a window is maximized, the WM titlebar decorations are hidden to reclaim vertical space
-- On X11: uses `_MOTIF_WM_HINTS` via `xprop` to control decorations (handles both CSD and SSD apps correctly)
 - On Wayland: uses `button-layout` manipulation with a CSD nudge workaround
 - LibreOffice headerbar is specifically targeted via GTK3 CSS injection (clean, non-destructive)
 
@@ -44,7 +43,7 @@ macOS-style **close** and **restore** buttons in the top panel with the window t
 - A "saved_rect poisoning" technique overwrites Mutter's internal restore position so that GNOME always animates to the correct centered target
 
 ### Robust Architecture
-- Full **X11 and Wayland** support, including XWayland windows under Wayland sessions
+- Full **Wayland** support, including XWayland windows under Wayland sessions
 - Per-window state tracking via WeakMap (automatic garbage collection)
 - All deferred timeouts are tracked and cleaned up on `disable()` — no leaked timers
 - Safety timeouts prevent windows from getting stuck in broken states
@@ -103,7 +102,7 @@ Then restart GNOME Shell (X11: `Alt+F2` → `r`) or log out/in (Wayland).
 |-------------|--------|
 | GNOME Shell 46 | ✅ Tested |
 | GNOME Shell 47 | ✅ Tested |
-| X11 session | ✅ Full support |
+| X11 session | ❌ Not supported |
 | Wayland session | ✅ Full support |
 | XWayland apps | ✅ Handled per-window |
 | Multi-monitor | ✅ Per-monitor work area |
